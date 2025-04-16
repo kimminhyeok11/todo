@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo 앱</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header-card">
+            <div class="date-display">
+                <span id="current-date"></span>
+            </div>
+            
+            <div class="todo-input">
+                <input type="text" id="new-todo" placeholder="새로운 할 일 추가...">
+                <button id="add-todo">추가하기</button>
+            </div>
+        </div>
+        
+        <div class="todo-list" id="todo-list">
+            <!-- Todo items will be added here dynamically -->
+        </div>
+        
+        <div class="calendar-container">
+            <div class="calendar-header">
+                <button id="prev-month">&lt;</button>
+                <h2 id="month-year"></h2>
+                <button id="next-month">&gt;</button>
+            </div>
+            <div class="weekdays">
+                <div>일</div>
+                <div>월</div>
+                <div>화</div>
+                <div>수</div>
+                <div>목</div>
+                <div>금</div>
+                <div>토</div>
+            </div>
+            <div class="calendar" id="calendar">
+                <!-- Calendar days will be added here dynamically -->
+            </div>
+        </div>
+        
+        <div class="quick-note">
+            <textarea id="quick-note-input" placeholder="i can do it" rows="5"></textarea>
+            <button id="save-note">저장</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
