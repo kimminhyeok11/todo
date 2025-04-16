@@ -6,6 +6,8 @@
     <title>Todo 앱</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" type="image/png" href="favicon.png">
+    <!-- html2canvas CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -45,11 +47,29 @@
         </div>
         
         <div class="quick-note">
-            <textarea id="quick-note-input" placeholder="i can do it" rows="5"></textarea>
-            <button id="save-note">저장</button>
+            <textarea id="quick-note-input" placeholder="i can do it" rows="5" style="width: 100%; margin-bottom: 10px;"></textarea>
+<button id="save-note" style="width: 100%;">저장</button>
+<button id="share-screen" class="share-btn" style="width: 100%; margin-top: 8px;">공유</button>
         </div>
     </div>
 
     <script src="script.js"></script>
+<script>
+  document.getElementById("share-screen").onclick = async function() {
+    const canvas = await html2canvas(document.body);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+    if (!blob) return alert("이미지 생성 실패");
+    const file = new File([blob], "screenshot.png", { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        title: "화면 공유",
+        text: "내 화면을 공유합니다!",
+        files: [file],
+      });
+    } else {
+      alert("이 브라우저에서는 이미지 공유를 지원하지 않습니다. 최신 모바일 브라우저에서 시도해 주세요.");
+    }
+  };
+</script>
 </body>
 </html>
