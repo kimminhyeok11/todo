@@ -2,74 +2,888 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Todo 앱</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="icon" type="image/png" href="favicon.png">
-    <!-- html2canvas CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>스프라이트 아틀라스 생성기 v3.6</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- GIF.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* 기본 스타일 및 스피너 애니메이션 */
+        html, body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none;
+            background-color: #111827; /* bg-gray-900 */
+            color: #d1d5db; /* text-gray-300 */
+        }
+        #canvas-wrapper { touch-action: none; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        .loading-spinner {
+            border: 4px solid #374151; /* border-gray-700 */
+            border-top: 4px solid #38bdf8; /* border-sky-400 */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header-card">
-            <div class="date-display">
-                <span id="current-date"></span>
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <header class="text-center mb-8 relative">
+            <h1 class="text-4xl font-bold text-white">스프라이트 아틀라스 생성기 v3.6</h1>
+            <p class="text-slate-400 mt-2">JSON 출력에 원본 이미지 해상도 정보를 추가했습니다.</p>
+            <button id="reset-app-btn" class="hidden absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white text-sm font-bold py-2 px-4 rounded-lg transition">
+                새로 시작
+            </button>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- 왼쪽 컬럼: 이미지 업로드 & 캔버스 -->
+            <div class="lg:col-span-2 bg-slate-800/50 backdrop-blur-sm border border-slate-700 p-6 rounded-2xl shadow-lg">
+                <div id="upload-container" class="text-center">
+                    <label for="image-upload" class="cursor-pointer inline-block bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">
+                        이미지 업로드
+                    </label>
+                    <input type="file" id="image-upload" accept="image/*" class="hidden">
+                    <p id="upload-prompt" class="mt-4 text-slate-500">스프라이트 시트 이미지를 선택해주세요.</p>
+                </div>
+                <div id="canvas-container" class="hidden">
+                    <div id="canvas-wrapper" class="relative w-full h-[50vh] lg:h-[60vh] bg-gray-900 rounded-lg overflow-hidden cursor-grab active:cursor-grabbing">
+                        <canvas id="canvas"></canvas>
+                    </div>
+                    <div class="flex items-center justify-between mt-4 flex-wrap gap-2">
+                         <div class="flex items-center gap-2">
+                             <button id="auto-slice-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-2 px-4 rounded-lg transition">✨ 자동 분할</button>
+                             <button id="reset-view-btn" class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-bold py-2 px-4 rounded-lg transition">뷰 리셋</button>
+                         </div>
+                        <p class="text-sm text-slate-400">
+                            <span class="font-bold text-white">확대/축소:</span> 휠/핀치 | <span class="font-bold text-white">삭제(PC):</span> Shift+클릭 | <span class="font-bold text-white">이동(PC):</span> Ctrl+드래그
+                        </p>
+                    </div>
+                </div>
             </div>
-            
-            <div class="todo-input">
-                <input type="text" id="new-todo" placeholder="새로운 할 일 추가...">
-                <button id="add-todo">추가하기</button>
+
+            <!-- 오른쪽 컬럼: 컨트롤 패널 -->
+             <div class="lg:col-start-3 lg:row-start-1 lg:row-span-2 bg-slate-800/50 backdrop-blur-sm border border-slate-700 p-6 rounded-2xl shadow-lg space-y-6">
+                <div>
+                    <h2 class="text-2xl font-semibold text-white mb-4 border-b border-slate-700 pb-2">정의된 스프라이트</h2>
+                    <div id="sprite-list" class="space-y-2 h-48 overflow-y-auto pr-2">
+                        <p id="sprite-list-placeholder" class="text-slate-500 text-center py-8">아직 정의된 스프라이트가 없습니다.</p>
+                    </div>
+                </div>
+
+                <div id="anim-zone" class="hidden">
+                    <h2 class="text-2xl font-semibold text-white mb-4 border-b border-slate-700 pb-2">애니메이션 클립</h2>
+                    <div id="anim-clips-list" class="space-y-2 mb-4"></div>
+                    <div class="flex gap-2">
+                        <input type="text" id="new-clip-name" class="bg-slate-700 w-full text-white p-2 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 focus:outline-none" placeholder="새 클립 이름 (예: walk)">
+                        <button id="add-clip-btn" class="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg transition">추가</button>
+                    </div>
+                </div>
+
+                <div id="test-zone" class="hidden">
+                    <h2 class="text-2xl font-semibold text-white mb-4 border-b border-slate-700 pb-2">애니메이션 테스트 존</h2>
+                    <div class="bg-gray-900 p-4 rounded-lg">
+                        <canvas id="test-canvas" class="w-full h-32 mx-auto border border-slate-700 rounded-md bg-slate-800/50"></canvas>
+                        <div class="flex items-center justify-between mt-4">
+                            <div class="flex items-center gap-2">
+                                <button id="play-pause-btn" class="bg-sky-600 hover:bg-sky-700 text-white font-bold w-10 h-10 rounded-full flex items-center justify-center transition">▶</button>
+                                <label for="fps-input" class="text-sm text-slate-400">FPS:</label>
+                                <input type="number" id="fps-input" value="12" min="1" max="60" class="bg-slate-700 w-16 text-white p-2 rounded-md border border-slate-600 focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                            </div>
+                             <button id="export-gif-btn" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold py-2 px-3 rounded-lg transition">GIF 내보내기</button>
+                        </div>
+                    </div>
+                     <div id="test-sprite-list" class="mt-2 space-y-1 text-sm text-slate-400"></div>
+                </div>
+
+                <div>
+                    <h2 class="text-2xl font-semibold text-white mt-4 mb-4 border-b border-slate-700 pb-2">생성된 데이터 (JSON)</h2>
+                    <div class="relative">
+                        <textarea id="json-output" readonly class="w-full h-32 bg-gray-900 rounded-lg p-3 text-sm font-mono text-slate-300 border border-slate-700 focus:ring-2 focus:ring-sky-500 focus:outline-none"></textarea>
+                        <button id="copy-button" class="absolute top-2 right-2 bg-slate-600 hover:bg-slate-500 text-white text-xs font-bold py-1 px-3 rounded-md transition">복사</button>
+                    </div>
+                </div>
             </div>
-        </div>
-        
-        <div class="todo-list" id="todo-list">
-            <!-- Todo items will be added here dynamically -->
-        </div>
-        
-        <div class="calendar-container">
-            <div class="calendar-header">
-                <button id="prev-month">&lt;</button>
-                <h2 id="month-year"></h2>
-                <button id="next-month">&gt;</button>
-            </div>
-            <div class="weekdays">
-                <div>일</div>
-                <div>월</div>
-                <div>화</div>
-                <div>수</div>
-                <div>목</div>
-                <div>금</div>
-                <div>토</div>
-            </div>
-            <div class="calendar" id="calendar">
-                <!-- Calendar days will be added here dynamically -->
-            </div>
-        </div>
-        
-        <div class="quick-note">
-            <textarea id="quick-note-input" placeholder="i can do it" rows="5" style="width: 100%; margin-bottom: 10px;"></textarea>
-<button id="save-note" style="width: 100%;">저장</button>
-<button id="share-screen" class="share-btn" style="width: 100%; margin-top: 8px;">공유</button>
-        </div>
+        </main>
     </div>
 
-    <script src="script.js"></script>
-<script>
-  document.getElementById("share-screen").onclick = async function() {
-    const canvas = await html2canvas(document.body);
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
-    if (!blob) return alert("이미지 생성 실패");
-    const file = new File([blob], "screenshot.png", { type: "image/png" });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({
-        title: "화면 공유",
-        text: "내 화면을 공유합니다!",
-        files: [file],
-      });
-    } else {
-      alert("이 브라우저에서는 이미지 공유를 지원하지 않습니다. 최신 모바일 브라우저에서 시도해 주세요.");
-    }
-  };
-</script>
+    <!-- 모달 창 -->
+    <div id="loading-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
+            <div class="loading-spinner mx-auto"></div>
+            <p id="loading-text" class="text-white mt-4">자동 분할 진행 중...</p>
+        </div>
+    </div>
+    
+    <div id="message-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
+            <p id="message-text" class="text-white mb-6"></p>
+            <button id="message-ok-btn" class="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-6 rounded-lg transition">확인</button>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM 요소 ---
+            const dom = {
+                imageUpload: document.getElementById('image-upload'),
+                uploadContainer: document.getElementById('upload-container'),
+                canvasContainer: document.getElementById('canvas-container'),
+                canvasWrapper: document.getElementById('canvas-wrapper'),
+                canvas: document.getElementById('canvas'),
+                resetViewBtn: document.getElementById('reset-view-btn'),
+                autoSliceBtn: document.getElementById('auto-slice-btn'),
+                spriteList: document.getElementById('sprite-list'),
+                spriteListPlaceholder: document.getElementById('sprite-list-placeholder'),
+                jsonOutput: document.getElementById('json-output'),
+                copyButton: document.getElementById('copy-button'),
+                resetAppBtn: document.getElementById('reset-app-btn'),
+                // 모달
+                loadingModal: document.getElementById('loading-modal'),
+                loadingText: document.getElementById('loading-text'),
+                messageModal: document.getElementById('message-modal'),
+                messageText: document.getElementById('message-text'),
+                messageOkBtn: document.getElementById('message-ok-btn'),
+                // 애니메이션 존
+                animZone: document.getElementById('anim-zone'),
+                animClipsList: document.getElementById('anim-clips-list'),
+                newClipNameInput: document.getElementById('new-clip-name'),
+                addClipBtn: document.getElementById('add-clip-btn'),
+                // 테스트 존
+                testZone: document.getElementById('test-zone'),
+                testCanvas: document.getElementById('test-canvas'),
+                playPauseBtn: document.getElementById('play-pause-btn'),
+                fpsInput: document.getElementById('fps-input'),
+                exportGifBtn: document.getElementById('export-gif-btn'),
+                testSpriteList: document.getElementById('test-sprite-list'),
+            };
+            const ctx = dom.canvas.getContext('2d');
+            const testCtx = dom.testCanvas.getContext('2d');
+
+            // --- 상태 변수 ---
+            let state = {
+                originalImage: null,
+                displayImage: null,
+                sprites: [],
+                animations: {},
+                activeClipName: null,
+                transform: { x: 0, y: 0, scale: 1 },
+                hoveredSpriteIndex: -1,
+                // 상호작용 상태
+                interaction: {
+                    isDragging: false,
+                    isPanning: false,
+                    isPinching: false,
+                    startPos: { x: 0, y: 0 },
+                    lastPos: { x: 0, y: 0 },
+                    currentRect: null,
+                    initialPinchDistance: null,
+                    pinchStartTransform: {},
+                },
+                // 애니메이션 상태
+                animation: {
+                    isPlaying: false,
+                    currentFrame: 0,
+                    lastFrameTime: 0,
+                    animationFrameId: null,
+                }
+            };
+
+            // --- 초기화 ---
+            function init() {
+                addEventListeners();
+                window.addEventListener('resize', fitCanvasToWrapper);
+            }
+
+            // --- 이벤트 리스너 등록 ---
+            function addEventListeners() {
+                dom.imageUpload.addEventListener('change', handleImageUpload);
+                dom.resetAppBtn.addEventListener('click', resetApplication);
+                dom.resetViewBtn.addEventListener('click', resetView);
+                dom.autoSliceBtn.addEventListener('click', handleAutoSlice);
+                dom.copyButton.addEventListener('click', handleCopyJson);
+                dom.messageOkBtn.addEventListener('click', () => hideModal(dom.messageModal));
+
+                // 캔버스 상호작용
+                dom.canvas.addEventListener('mousedown', handleInteractionStart);
+                dom.canvas.addEventListener('mousemove', handleInteractionMove);
+                window.addEventListener('mouseup', handleInteractionEnd);
+                dom.canvas.addEventListener('wheel', handleWheel, { passive: false });
+                dom.canvas.addEventListener('touchstart', handleInteractionStart, { passive: false });
+                dom.canvas.addEventListener('touchmove', handleInteractionMove, { passive: false });
+                window.addEventListener('touchend', handleInteractionEnd);
+
+                // 스프라이트 목록
+                dom.spriteList.addEventListener('click', handleSpriteListClick);
+                dom.spriteList.addEventListener('change', handleSpriteNameChange);
+
+                // 애니메이션 클립
+                dom.addClipBtn.addEventListener('click', handleAddClip);
+                dom.animClipsList.addEventListener('click', handleAnimClipsListClick);
+
+                // 테스트 존
+                dom.playPauseBtn.addEventListener('click', toggleAnimation);
+                dom.fpsInput.addEventListener('change', handleFpsChange);
+                dom.testSpriteList.addEventListener('click', handleTestSpriteListClick);
+                dom.exportGifBtn.addEventListener('click', handleExportGif);
+            }
+
+            // --- 이미지 처리 ---
+            function handleImageUpload(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                showLoading('이미지를 불러오는 중...');
+                const reader = new FileReader();
+                
+                reader.onload = (event) => {
+                    state.originalImage = new Image();
+                    state.originalImage.onload = () => {
+                        // 미리보기용 이미지 생성 (성능을 위해 큰 이미지는 축소)
+                        const MAX_PREVIEW_SIZE = 4096;
+                        const { naturalWidth: w, naturalHeight: h } = state.originalImage;
+
+                        if (w > MAX_PREVIEW_SIZE || h > MAX_PREVIEW_SIZE) {
+                            const previewCanvas = document.createElement('canvas');
+                            const previewCtx = previewCanvas.getContext('2d');
+                            const ratio = w / h;
+                            if (w > h) {
+                                previewCanvas.width = MAX_PREVIEW_SIZE;
+                                previewCanvas.height = MAX_PREVIEW_SIZE / ratio;
+                            } else {
+                                previewCanvas.height = MAX_PREVIEW_SIZE;
+                                previewCanvas.width = MAX_PREVIEW_SIZE * ratio;
+                            }
+                            previewCtx.drawImage(state.originalImage, 0, 0, previewCanvas.width, previewCanvas.height);
+                            state.displayImage = previewCanvas;
+                            showMessage(`이미지가 너무 커서(${w}x${h}) 미리보기 품질을 낮춥니다. 원본 데이터는 유지됩니다.`);
+                        } else {
+                            state.displayImage = state.originalImage;
+                        }
+
+                        // UI 상태 변경
+                        dom.uploadContainer.classList.add('hidden');
+                        dom.canvasContainer.classList.remove('hidden');
+                        dom.animZone.classList.remove('hidden');
+                        dom.testZone.classList.remove('hidden');
+                        dom.resetAppBtn.classList.remove('hidden');
+                        
+                        fitCanvasToWrapper();
+                        resetView();
+                        hideLoading();
+                    };
+                    state.originalImage.onerror = () => {
+                        hideLoading();
+                        showMessage('이미지 파일을 불러올 수 없습니다. 파일이 손상되었거나 지원하지 않는 형식입니다.');
+                    };
+                    state.originalImage.src = event.target.result;
+                };
+                reader.onerror = () => {
+                    hideLoading();
+                    showMessage('파일을 읽는 중 오류가 발생했습니다.');
+                };
+                reader.readAsDataURL(file);
+            }
+
+            // --- 캔버스 렌더링 및 제어 ---
+            function fitCanvasToWrapper() {
+                if (!state.displayImage) return;
+                dom.canvas.width = dom.canvasWrapper.clientWidth;
+                dom.canvas.height = dom.canvasWrapper.clientHeight;
+                drawCanvas();
+            }
+
+            function resetView() {
+                if (!state.displayImage) return;
+                const scaleX = dom.canvas.width / state.displayImage.width;
+                const scaleY = dom.canvas.height / state.displayImage.height;
+                state.transform.scale = Math.min(scaleX, scaleY) * 0.9;
+                state.transform.x = (dom.canvas.width - state.displayImage.width * state.transform.scale) / 2;
+                state.transform.y = (dom.canvas.height - state.displayImage.height * state.transform.scale) / 2;
+                drawCanvas();
+            }
+
+            function drawCanvas() {
+                if (!state.displayImage) return;
+                ctx.clearRect(0, 0, dom.canvas.width, dom.canvas.height);
+                ctx.save();
+                ctx.translate(state.transform.x, state.transform.y);
+                ctx.scale(state.transform.scale, state.transform.scale);
+                ctx.imageSmoothingEnabled = false;
+                
+                ctx.drawImage(state.displayImage, 0, 0);
+
+                const scaleRatio = state.displayImage.width / state.originalImage.naturalWidth;
+                ctx.lineWidth = 2 / (state.transform.scale * scaleRatio);
+
+                // 기존 스프라이트 그리기
+                state.sprites.forEach((s, index) => {
+                    const isHovered = index === state.hoveredSpriteIndex;
+                    const isActiveClip = state.activeClipName && state.animations[state.activeClipName]?.frames.includes(index);
+                    
+                    if (isHovered) {
+                        ctx.fillStyle = 'rgba(239, 68, 68, 0.5)';
+                        ctx.strokeStyle = '#dc2626';
+                    } else if (isActiveClip) {
+                        ctx.fillStyle = 'rgba(22, 163, 74, 0.4)';
+                        ctx.strokeStyle = '#15803d';
+                    } else {
+                        ctx.fillStyle = 'rgba(56, 189, 248, 0.3)';
+                        ctx.strokeStyle = '#0284c7';
+                    }
+                    
+                    const rect = {
+                        x: s.x * scaleRatio,
+                        y: s.y * scaleRatio,
+                        w: s.w * scaleRatio,
+                        h: s.h * scaleRatio
+                    };
+                    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+                    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+                });
+
+                // 드래그 중인 사각형 그리기
+                if (state.interaction.isDragging && state.interaction.currentRect) {
+                    ctx.fillStyle = 'rgba(239, 68, 68, 0.4)';
+                    ctx.strokeStyle = '#dc2626';
+                    const rect = {
+                        x: state.interaction.currentRect.x * scaleRatio,
+                        y: state.interaction.currentRect.y * scaleRatio,
+                        w: state.interaction.currentRect.w * scaleRatio,
+                        h: state.interaction.currentRect.h * scaleRatio
+                    };
+                    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+                    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+                }
+                ctx.restore();
+            }
+
+            // --- 캔버스 상호작용 핸들러 ---
+            function getEventPos(e) {
+                const rect = dom.canvas.getBoundingClientRect();
+                const touch = e.touches ? e.touches[0] : e;
+                return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+            }
+            
+            function screenToWorld(x, y) {
+                return { 
+                    x: (x - state.transform.x) / state.transform.scale, 
+                    y: (y - state.transform.y) / state.transform.scale 
+                };
+            }
+
+            function handleInteractionStart(e) {
+                if (e.touches && e.touches.length === 2) { // 핀치 줌 시작
+                    e.preventDefault();
+                    state.interaction.isPinching = true;
+                    state.interaction.isDragging = false;
+                    state.interaction.isPanning = false;
+                    state.interaction.initialPinchDistance = getPinchDistance(e.touches);
+                    state.interaction.pinchStartTransform = { ...state.transform };
+                    return;
+                }
+                
+                state.interaction.lastPos = getEventPos(e);
+                const worldPos = screenToWorld(state.interaction.lastPos.x, state.interaction.lastPos.y);
+                const scaleRatio = state.displayImage.width / state.originalImage.naturalWidth;
+                
+                // Shift+Click으로 스프라이트 삭제
+                if (e.shiftKey && state.hoveredSpriteIndex !== -1) {
+                    deleteSprite(state.hoveredSpriteIndex);
+                    state.hoveredSpriteIndex = -1;
+                    drawCanvas();
+                    return;
+                }
+                
+                state.interaction.startPos = { x: worldPos.x / scaleRatio, y: worldPos.y / scaleRatio };
+
+                if (e.ctrlKey || (e.button && e.button === 1)) { // 패닝 시작 (Ctrl키 또는 마우스 휠클릭)
+                    state.interaction.isPanning = true;
+                } else { // 드래그 시작
+                    state.interaction.isDragging = true;
+                }
+            }
+
+            function handleInteractionMove(e) {
+                if (state.interaction.isPinching && e.touches && e.touches.length === 2) { // 핀치 줌
+                    e.preventDefault();
+                    const currentDist = getPinchDistance(e.touches);
+                    const zoomFactor = currentDist / state.interaction.initialPinchDistance;
+                    const newScale = state.interaction.pinchStartTransform.scale * zoomFactor;
+                    
+                    const midPoint = getPinchMidpoint(e.touches);
+                    state.transform.scale = newScale;
+                    state.transform.x = midPoint.x - (midPoint.x - state.interaction.pinchStartTransform.x) * zoomFactor;
+                    state.transform.y = midPoint.y - (midPoint.y - state.interaction.pinchStartTransform.y) * zoomFactor;
+
+                } else if (state.interaction.isPanning) { // 패닝
+                    const pos = getEventPos(e);
+                    state.transform.x += pos.x - state.interaction.lastPos.x;
+                    state.transform.y += pos.y - state.interaction.lastPos.y;
+                    state.interaction.lastPos = pos;
+
+                } else if (state.interaction.isDragging) { // 드래그
+                    const pos = getEventPos(e);
+                    const worldPos = screenToWorld(pos.x, pos.y);
+                    const scaleRatio = state.displayImage.width / state.originalImage.naturalWidth;
+                    const endPos = { x: worldPos.x / scaleRatio, y: worldPos.y / scaleRatio };
+                    state.interaction.currentRect = {
+                        x: Math.min(state.interaction.startPos.x, endPos.x),
+                        y: Math.min(state.interaction.startPos.y, endPos.y),
+                        w: Math.abs(state.interaction.startPos.x - endPos.x),
+                        h: Math.abs(state.interaction.startPos.y - endPos.y)
+                    };
+
+                } else if (!e.touches) { // 마우스 호버
+                    const pos = getEventPos(e);
+                    const worldPos = screenToWorld(pos.x, pos.y);
+                    const scaleRatio = state.displayImage.width / state.originalImage.naturalWidth;
+                    const checkPos = { x: worldPos.x / scaleRatio, y: worldPos.y / scaleRatio };
+                    
+                    let foundIndex = -1;
+                    for (let i = state.sprites.length - 1; i >= 0; i--) {
+                        const s = state.sprites[i];
+                        if (checkPos.x >= s.x && checkPos.x <= s.x + s.w && checkPos.y >= s.y && checkPos.y <= s.y + s.h) {
+                            foundIndex = i;
+                            break;
+                        }
+                    }
+                    if (state.hoveredSpriteIndex !== foundIndex) {
+                        state.hoveredSpriteIndex = foundIndex;
+                        dom.canvas.style.cursor = foundIndex !== -1 ? 'pointer' : 'grab';
+                    }
+                }
+                
+                drawCanvas();
+            }
+
+            function handleInteractionEnd(e) {
+                if (state.interaction.isDragging && state.interaction.currentRect) {
+                    if (state.interaction.currentRect.w > 2 && state.interaction.currentRect.h > 2) {
+                        const newSprite = {
+                            name: `sprite_${state.sprites.length + 1}`,
+                            x: Math.round(state.interaction.currentRect.x),
+                            y: Math.round(state.interaction.currentRect.y),
+                            w: Math.round(state.interaction.currentRect.w),
+                            h: Math.round(state.interaction.currentRect.h)
+                        };
+                        state.sprites.push(newSprite);
+                        updateAllUI();
+                    }
+                }
+                
+                // 모든 상호작용 상태 초기화
+                state.interaction = { ...state.interaction, isDragging: false, isPanning: false, isPinching: false, currentRect: null, initialPinchDistance: null };
+                dom.canvas.style.cursor = 'grab';
+                drawCanvas();
+            }
+            
+            function handleWheel(e) {
+                e.preventDefault();
+                const pos = getEventPos(e);
+                const zoom = e.deltaY < 0 ? 1.1 : 0.9;
+                state.transform.x = pos.x - (pos.x - state.transform.x) * zoom;
+                state.transform.y = pos.y - (pos.y - state.transform.y) * zoom;
+                state.transform.scale *= zoom;
+                drawCanvas();
+            }
+
+            // --- 핀치 줌 유틸리티 ---
+            function getPinchDistance(touches) { const dx = touches[0].clientX - touches[1].clientX; const dy = touches[0].clientY - touches[1].clientY; return Math.sqrt(dx * dx + dy * dy); }
+            function getPinchMidpoint(touches) { const rect = dom.canvas.getBoundingClientRect(); return { x: (touches[0].clientX + touches[1].clientX) / 2 - rect.left, y: (touches[0].clientY + touches[1].clientY) / 2 - rect.top }; }
+
+            // --- 데이터 및 UI 업데이트 ---
+            function updateAllUI() {
+                renderSpriteList();
+                renderAnimClips();
+                renderJsonOutput();
+                drawCanvas();
+            }
+
+            function deleteSprite(indexToDelete) {
+                state.sprites.splice(indexToDelete, 1);
+                // 애니메이션 클립에서 삭제된 스프라이트 인덱스 조정
+                Object.values(state.animations).forEach(clip => {
+                    clip.frames = clip.frames
+                        .filter(frameIndex => frameIndex !== indexToDelete)
+                        .map(frameIndex => frameIndex > indexToDelete ? frameIndex - 1 : frameIndex);
+                });
+                updateAllUI();
+            }
+
+            function renderSpriteList() {
+                dom.spriteListPlaceholder.classList.toggle('hidden', state.sprites.length > 0);
+                dom.spriteList.innerHTML = '';
+                if (!state.originalImage) return;
+
+                state.sprites.forEach((sprite, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'flex items-center justify-between bg-slate-900/50 p-2 rounded-lg gap-3';
+                    
+                    const previewCanvas = document.createElement('canvas');
+                    previewCanvas.width = 40;
+                    previewCanvas.height = 40;
+                    previewCanvas.className = 'bg-slate-800 border border-slate-700 rounded-md flex-shrink-0';
+                    
+                    item.innerHTML = `
+                        <div class="flex-1 overflow-hidden">
+                            <input type="text" value="${sprite.name}" data-index="${index}" class="sprite-name-input bg-transparent font-semibold text-white truncate w-full focus:bg-slate-700 rounded px-1">
+                            <p class="text-xs text-slate-400">x:${sprite.x}, y:${sprite.y}, w:${sprite.w}, h:${sprite.h}</p>
+                        </div>
+                        <div class="flex space-x-1">
+                            <button title="활성 클립에 추가" data-index="${index}" class="add-to-clip-btn bg-slate-700 text-green-400 hover:bg-slate-600 w-7 h-7 flex items-center justify-center rounded-md transition ${!state.activeClipName ? 'opacity-50 cursor-not-allowed' : ''}" ${!state.activeClipName ? 'disabled' : ''}>+</button>
+                            <button title="삭제" data-index="${index}" class="delete-btn bg-slate-700 text-red-400 hover:bg-slate-600 w-7 h-7 flex items-center justify-center rounded-md transition">×</button>
+                        </div>
+                    `;
+                    item.prepend(previewCanvas);
+                    dom.spriteList.appendChild(item);
+
+                    // 미리보기 그리기
+                    const pCtx = previewCanvas.getContext('2d');
+                    pCtx.imageSmoothingEnabled = false;
+                    const ratio = sprite.w / sprite.h;
+                    let dw = previewCanvas.width, dh = dw / ratio;
+                    if (dh > previewCanvas.height) {
+                        dh = previewCanvas.height;
+                        dw = dh * ratio;
+                    }
+                    const dx = (previewCanvas.width - dw) / 2;
+                    const dy = (previewCanvas.height - dh) / 2;
+                    pCtx.drawImage(state.originalImage, sprite.x, sprite.y, sprite.w, sprite.h, dx, dy, dw, dh);
+                });
+            }
+
+            function handleSpriteListClick(e) {
+                const button = e.target.closest('button');
+                if (!button) return;
+                const index = parseInt(button.dataset.index, 10);
+                if (button.classList.contains('delete-btn')) {
+                    deleteSprite(index);
+                } else if (button.classList.contains('add-to-clip-btn')) {
+                    const clip = state.animations[state.activeClipName];
+                    if (clip) {
+                        clip.frames.push(index);
+                        renderAnimClips();
+                    }
+                }
+            }
+            
+            function handleSpriteNameChange(e) {
+                if (e.target.classList.contains('sprite-name-input')) {
+                    const index = parseInt(e.target.dataset.index, 10);
+                    state.sprites[index].name = e.target.value;
+                    renderJsonOutput();
+                }
+            }
+
+            // --- JSON 출력 (해상도 정보 추가) ---
+            function renderJsonOutput() {
+                if (!state.originalImage) {
+                    dom.jsonOutput.value = '';
+                    return;
+                }
+                const output = {
+                    meta: {
+                        image: dom.imageUpload.files[0]?.name || 'sprite_sheet.png',
+                        size: {
+                            w: state.originalImage.naturalWidth,
+                            h: state.originalImage.naturalHeight
+                        }
+                    },
+                    sprites: state.sprites,
+                    animations: state.animations
+                };
+                dom.jsonOutput.value = JSON.stringify(output, null, 2);
+            }
+
+            // --- 애니메이션 클립 관리 ---
+            function handleAddClip() {
+                const name = dom.newClipNameInput.value.trim();
+                if (name && !state.animations[name]) {
+                    state.animations[name] = { frames: [], fps: 12 };
+                    if (!state.activeClipName) {
+                        state.activeClipName = name;
+                    }
+                    dom.newClipNameInput.value = '';
+                    updateAllUI();
+                }
+            }
+
+            function renderAnimClips() {
+                dom.animClipsList.innerHTML = '';
+                Object.keys(state.animations).forEach(name => {
+                    const clip = state.animations[name];
+                    const isActive = name === state.activeClipName;
+                    const div = document.createElement('div');
+                    div.className = `p-2 rounded-lg cursor-pointer ${isActive ? 'bg-sky-600' : 'bg-slate-700 hover:bg-slate-600'}`;
+                    div.dataset.name = name;
+                    div.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-white">${name}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-slate-300">${clip.frames.length} 프레임</span>
+                                <button data-name="${name}" class="delete-clip-btn text-red-400 hover:text-red-300 font-bold px-1 rounded">&times;</button>
+                            </div>
+                        </div>
+                    `;
+                    dom.animClipsList.appendChild(div);
+                });
+                renderTestSpriteList();
+                renderSpriteList(); // 활성 클립이 바뀌면 버튼 상태를 갱신해야 함
+            }
+
+            function handleAnimClipsListClick(e) {
+                const clipDiv = e.target.closest('[data-name]');
+                if (!clipDiv) return;
+                const name = clipDiv.dataset.name;
+
+                if (e.target.closest('.delete-clip-btn')) {
+                    delete state.animations[name];
+                    if (state.activeClipName === name) {
+                        state.activeClipName = Object.keys(state.animations)[0] || null;
+                    }
+                } else {
+                    state.activeClipName = name;
+                    dom.fpsInput.value = state.animations[name]?.fps || 12;
+                }
+                updateAllUI();
+            }
+
+            // --- 애니메이션 테스트 ---
+            function renderTestSpriteList() {
+                const clip = state.animations[state.activeClipName];
+                if (!clip) {
+                    dom.testSpriteList.innerHTML = '<p class="text-slate-500 text-center">활성 클립이 없습니다.</p>';
+                    return;
+                }
+                if (clip.frames.length === 0) {
+                    dom.testSpriteList.innerHTML = '<p class="text-slate-500 text-center">스프라이트를 추가해주세요.</p>';
+                    return;
+                }
+                dom.testSpriteList.innerHTML = clip.frames.map((spriteIndex, listIndex) => {
+                    const spriteName = state.sprites[spriteIndex]?.name || 'N/A';
+                    return `<div class="flex items-center justify-between bg-slate-700/50 p-1 px-2 rounded text-xs"><span>${listIndex + 1}. ${spriteName}</span><button data-list-index="${listIndex}" class="remove-from-test-btn text-red-400 hover:text-red-300 font-bold px-1 rounded">&times;</button></div>`;
+                }).join('');
+            }
+            
+            function handleTestSpriteListClick(e) {
+                const button = e.target.closest('.remove-from-test-btn');
+                if (button && state.activeClipName) {
+                    const listIndex = parseInt(button.dataset.listIndex, 10);
+                    state.animations[state.activeClipName].frames.splice(listIndex, 1);
+                    renderAnimClips();
+                }
+            }
+
+            function handleFpsChange() {
+                if (state.activeClipName) {
+                    state.animations[state.activeClipName].fps = parseInt(dom.fpsInput.value, 10) || 12;
+                    renderJsonOutput();
+                }
+            }
+
+            function toggleAnimation() {
+                state.animation.isPlaying = !state.animation.isPlaying;
+                dom.playPauseBtn.innerHTML = state.animation.isPlaying ? '❚❚' : '▶';
+                if (state.animation.isPlaying) {
+                    state.animation.currentFrame = -1;
+                    state.animation.lastFrameTime = performance.now();
+                    animationLoop(state.animation.lastFrameTime);
+                } else {
+                    cancelAnimationFrame(state.animation.animationFrameId);
+                }
+            }
+
+            function animationLoop(timestamp) {
+                if (!state.animation.isPlaying) return;
+                const clip = state.animations[state.activeClipName];
+                if (!clip || clip.frames.length === 0) {
+                    toggleAnimation(); // 자동 정지
+                    return;
+                }
+                
+                const frameInterval = 1000 / (clip.fps || 12);
+                if (timestamp - state.animation.lastFrameTime > frameInterval) {
+                    state.animation.lastFrameTime = timestamp;
+                    state.animation.currentFrame = (state.animation.currentFrame + 1) % clip.frames.length;
+                    drawTestFrame();
+                }
+                state.animation.animationFrameId = requestAnimationFrame(animationLoop);
+            }
+
+            function drawTestFrame() {
+                const clip = state.animations[state.activeClipName];
+                testCtx.clearRect(0, 0, dom.testCanvas.width, dom.testCanvas.height);
+                if (!clip || clip.frames.length === 0) return;
+
+                const sprite = state.sprites[clip.frames[state.animation.currentFrame]];
+                if (!sprite) return;
+                
+                const ratio = sprite.w / sprite.h;
+                let dw = dom.testCanvas.width, dh = dw / ratio;
+                if (dh > dom.testCanvas.height) {
+                    dh = dom.testCanvas.height;
+                    dw = dh * ratio;
+                }
+                const dx = (dom.testCanvas.width - dw) / 2;
+                const dy = (dom.testCanvas.height - dh) / 2;
+                
+                testCtx.imageSmoothingEnabled = false;
+                testCtx.drawImage(state.originalImage, sprite.x, sprite.y, sprite.w, sprite.h, dx, dy, dw, dh);
+            }
+
+            // --- 부가 기능 ---
+            async function handleAutoSlice() {
+                if (!state.originalImage) return;
+                showLoading('자동 분할 진행 중...');
+                await new Promise(resolve => setTimeout(resolve, 50)); // UI 업데이트 시간을 줌
+
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = state.originalImage.naturalWidth;
+                tempCanvas.height = state.originalImage.naturalHeight;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(state.originalImage, 0, 0);
+                const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                const { data, width, height } = imageData;
+                const visited = new Array(width * height).fill(false);
+                const newSprites = [];
+                const MIN_DIM = 4; // 최소 크기
+
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const index = (y * width + x);
+                        if (visited[index] || data[index * 4 + 3] === 0) continue;
+
+                        const rect = { minX: x, minY: y, maxX: x, maxY: y };
+                        const stack = [[x, y]];
+                        visited[index] = true;
+
+                        while (stack.length > 0) {
+                            const [px, py] = stack.pop();
+                            rect.minX = Math.min(rect.minX, px);
+                            rect.minY = Math.min(rect.minY, py);
+                            rect.maxX = Math.max(rect.maxX, px);
+                            rect.maxY = Math.max(rect.maxY, py);
+                            
+                            const neighbors = [[px, py - 1], [px, py + 1], [px - 1, py], [px + 1, py]];
+                            for (const [nx, ny] of neighbors) {
+                                if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                    const nIndex = (ny * width + nx);
+                                    if (!visited[nIndex] && data[nIndex * 4 + 3] > 0) {
+                                        visited[nIndex] = true;
+                                        stack.push([nx, ny]);
+                                    }
+                                }
+                            }
+                        }
+                        const spriteW = rect.maxX - rect.minX + 1;
+                        const spriteH = rect.maxY - rect.minY + 1;
+                        if (spriteW >= MIN_DIM && spriteH >= MIN_DIM) {
+                            newSprites.push({
+                                name: `sprite_${state.sprites.length + newSprites.length + 1}`,
+                                x: rect.minX, y: rect.minY, w: spriteW, h: spriteH
+                            });
+                        }
+                    }
+                }
+                state.sprites.push(...newSprites);
+                updateAllUI();
+                hideLoading();
+            }
+
+            function handleExportGif() {
+                const clip = state.animations[state.activeClipName];
+                if (!clip || clip.frames.length === 0) {
+                    showMessage('내보낼 프레임이 없습니다.');
+                    return;
+                }
+                showLoading(`GIF 생성 중... (${clip.frames.length} 프레임)`);
+                
+                const gif = new GIF({
+                    workers: 2,
+                    quality: 10,
+                    workerScript: 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js'
+                });
+
+                let maxWidth = 0, maxHeight = 0;
+                clip.frames.forEach(i => {
+                    const s = state.sprites[i];
+                    if (s.w > maxWidth) maxWidth = s.w;
+                    if (s.h > maxHeight) maxHeight = s.h;
+                });
+
+                const frameDelay = 1000 / (clip.fps || 12);
+                clip.frames.forEach(i => {
+                    const s = state.sprites[i];
+                    const frameCanvas = document.createElement('canvas');
+                    frameCanvas.width = maxWidth;
+                    frameCanvas.height = maxHeight;
+                    const frameCtx = frameCanvas.getContext('2d');
+                    frameCtx.imageSmoothingEnabled = false;
+                    const dx = (maxWidth - s.w) / 2;
+                    const dy = (maxHeight - s.h) / 2;
+                    frameCtx.drawImage(state.originalImage, s.x, s.y, s.w, s.h, dx, dy, s.w, s.h);
+                    gif.addFrame(frameCanvas, { delay: frameDelay });
+                });
+
+                gif.on('finished', (blob) => {
+                    hideLoading();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${state.activeClipName || 'animation'}.gif`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                });
+                gif.render();
+            }
+
+            function handleCopyJson() {
+                dom.jsonOutput.select();
+                document.execCommand('copy');
+                showMessage('JSON 데이터가 복사되었습니다!');
+            }
+
+            function resetApplication() {
+                // 모든 상태 초기화
+                state = {
+                    originalImage: null, displayImage: null, sprites: [], animations: {},
+                    activeClipName: null, transform: { x: 0, y: 0, scale: 1 }, hoveredSpriteIndex: -1,
+                    interaction: { isDragging: false, isPanning: false, isPinching: false, startPos: { x: 0, y: 0 }, lastPos: { x: 0, y: 0 }, currentRect: null, initialPinchDistance: null, pinchStartTransform: {} },
+                    animation: { isPlaying: false, currentFrame: 0, lastFrameTime: 0, animationFrameId: null }
+                };
+                
+                if (state.animation.animationFrameId) cancelAnimationFrame(state.animation.animationFrameId);
+
+                // UI 초기화
+                dom.imageUpload.value = '';
+                dom.uploadContainer.classList.remove('hidden');
+                dom.canvasContainer.classList.add('hidden');
+                dom.animZone.classList.add('hidden');
+                dom.testZone.classList.add('hidden');
+                dom.resetAppBtn.classList.add('hidden');
+                ctx.clearRect(0, 0, dom.canvas.width, dom.canvas.height);
+                testCtx.clearRect(0, 0, dom.testCanvas.width, dom.testCanvas.height);
+                updateAllUI();
+            }
+
+            // --- 모달 유틸리티 ---
+            function showLoading(text) { dom.loadingText.textContent = text; dom.loadingModal.classList.remove('hidden'); }
+            function hideLoading() { dom.loadingModal.classList.add('hidden'); }
+            function showMessage(text) { dom.messageText.textContent = text; dom.messageModal.classList.remove('hidden'); }
+            function hideModal(modal) { modal.classList.add('hidden'); }
+
+            // --- 애플리케이션 시작 ---
+            init();
+        });
+    </script>
 </body>
 </html>
+
